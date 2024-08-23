@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"testing"
 
@@ -19,40 +20,42 @@ func TestPathTransformFunc(t *testing.T){
 	assert.Equal(t, filePath.Filename, expectedFilename)
 }
 
-func TestDeleteKey(t *testing.T){
-	opts := StoreOpts{
-		PathTrasnformFunc: CASPathTransformFunc,
+func TestStore(t *testing.T) {
+	s:= newStore()
+	defer teardown(t, s)
+
+	data := []byte("some file bytes")
+	for i:= 0; i< 10; i++{
+		key := fmt.Sprintf("MyFileKey_%d", i)
+	
+		err := s.writeStream(key, bytes.NewBuffer(data))
+		assert.NoError(t, err, "expect writeStream to run without errors")
+
+		hasIt := s.Has(key)
+		assert.True(t, hasIt, "expect file storage to has %s key", key)
+	
+		r, err := s.Read(key)
+		assert.NoError(t, err, "expect Read to run without errors")
+	
+		b, _ := io.ReadAll(r)
+		assert.Equal(t, b, data, "expect the file content to be the same as the provided one")
+
+		err = s.Delete(key)
+		assert.NoError(t, err, "expect Delete to run without errors")
 	}
 
-	s:= NewStore(opts)
-
-	key := "MyFileKey"
-	data := []byte("some file bytes")
-
-	assert.NoError(t, s.writeStream(key, bytes.NewBuffer(data)))
-	assert.NoError(t, s.Delete(key))
 }
 
-func TestStore(t *testing.T) {
+func newStore() *Store {
 	opts := StoreOpts{
 		PathTrasnformFunc: CASPathTransformFunc,
 	}
 
-	s:= NewStore(opts)
+	return NewStore(opts)
+}
 
-	key := "MyFileKey"
-	data := []byte("some file bytes")
-
-	assert.NoError(t, s.writeStream(key, bytes.NewBuffer(data)))
-
-	r, err := s.Read(key)
-	assert.NoError(t, err)
-
-	hasIt := s.Has(key)
-	assert.True(t, hasIt)
-
-	b, _ := io.ReadAll(r)
-	assert.Equal(t, b, data)
-
-	s.Delete(key)
+func teardown(t *testing.T, s *Store) {
+	if err := s.Clear(); err != nil {
+		t.Error(err)
+	}
 }
