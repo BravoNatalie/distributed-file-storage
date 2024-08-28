@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
+	"io"
 	"log"
 	"sync"
 
@@ -58,6 +61,40 @@ func (f *FileService) OnPeer(p p2p.Peer) error {
 	return nil
 }
 
+func (f *FileService) StoreData(key string, r io.Reader) error {
+
+	buf := new(bytes.Buffer)
+	tee := io.TeeReader(r, buf)
+
+	if err := f.store.Write(key, tee); err != nil {
+		return err
+	}
+
+	p := &Payload{
+		Key: key,
+		Data: buf.Bytes(),
+	}
+
+	fmt.Println(buf.Bytes())
+
+	return f.broadcast(p)
+}
+
+type Payload struct {
+	Key string
+	Data []byte
+}
+
+func (f *FileService) broadcast(p *Payload) error {
+	peers := []io.Writer{}
+	for _, peer := range f.peers {
+		peers = append(peers, peer)
+	}
+
+	mw := io.MultiWriter(peers...)
+	return  gob.NewEncoder(mw).Encode(p) 
+}
+
 func (f *FileService) bootstrapNodes() error {
 	for _, addr := range f.BootstrapNodes {
 		log.Println("attempting to connect with node on", addr)
@@ -81,7 +118,11 @@ func (f *FileService) listenForMessages() {
 	for{
 		select {
 		case msg := <- f.Transport.Consume():
-			fmt.Println(msg)
+			var p Payload
+			if err := gob.NewDecoder(bytes.NewReader(msg.Payload)).Decode(&p); err != nil{
+				log.Fatal(err)
+			}
+			fmt.Printf("%+v\n", p)
 		case <- f.quitch:
 			return
 		}

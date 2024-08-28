@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"log"
+	"time"
 
 	"github.com/bravonatalie/distributed-file-storage/p2p"
 )
@@ -44,8 +46,13 @@ func main() {
 	go func(){
 		log.Fatal(fs1.Start())
 	}()
-
+	time.Sleep(time.Second) // simulate bootup time
 
 	fs2.Start()
+	time.Sleep(time.Second) // simulate bootup time
 
+	key := "myPrivateKey"
+	data := bytes.NewReader(make([]byte, 100_000_000))
+
+	fs2.StoreData(key, data)
 }
